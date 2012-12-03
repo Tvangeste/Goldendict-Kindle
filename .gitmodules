@@ -1,0 +1,6 @@
+[submodule "deps/goldendict"]
+	path = deps/goldendict
+	url = git@github.com:VVSiz/goldendict.git
+[submodule "deps/coolreader"]
+	path = deps/coolreader
+	url = git@github.com:VVSiz/coolreader-kindle-qt.git
