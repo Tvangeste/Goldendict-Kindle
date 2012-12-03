@@ -1,3 +1,12 @@
+# Misc stuff
+*~
+*.tmp
+*.orig
+*.rej
+
+# Qt Creator user-specific settings
+*.pro.user
+
 # Compiled Object files
 *.slo
 *.lo
