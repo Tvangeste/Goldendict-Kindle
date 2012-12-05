@@ -19,6 +19,10 @@ KindleMainWindow::KindleMainWindow(Config::Class & cfg_) :
     actionClose->setText(tr("Close") + "\tAlt+Back");
     addAction(actionClose);
 
+    QAction * actionSelect = ui->actionSelect;
+    actionSelect->setShortcut(Qt::Key_Select);
+    ui->translateLine->addAction(actionSelect);
+
     connect( ui->translateLine, SIGNAL( textChanged( QString const & ) ),
                this, SLOT( translateInputChanged( QString const & ) ) );
     connect( ui->translateLine, SIGNAL( returnPressed() ),
@@ -36,6 +40,10 @@ KindleMainWindow::KindleMainWindow(Config::Class & cfg_) :
     connect( articleView, SIGNAL( typingEvent( QString const & ) ),
                this, SLOT( typingEvent( QString const & ) ) );
 
+    // install filters
+    ui->translateLine->installEventFilter( this );
+    wordList->installEventFilter( this );
+    wordList->viewport()->installEventFilter( this );
 
     connect( &wordFinder, SIGNAL( updated() ),
              this, SLOT( prefixMatchUpdated() ) );
@@ -107,6 +115,7 @@ void KindleMainWindow::showTranslationFor(QString const & word, unsigned group )
     group = Instances::Group::AllGroupId;
     ArticleView * view = getCurrentArticleView();
     view->showDefinition( word, group );
+    ui->stackedWidget->setCurrentIndex(0);
 }
 
 ArticleView * KindleMainWindow::getCurrentArticleView()
@@ -128,11 +137,24 @@ void KindleMainWindow::on_actionClose_triggered()
     close();
 }
 
+void KindleMainWindow::on_actionSelect_triggered()
+{
+    if (wordList->count() > 0) {
+        QListWidgetItem * item = wordList->currentItem();
+        if (item) {
+            QString word = item->text();
+            if (!word.isEmpty()) {
+                typingEvent(word);
+                showTranslationFor(word);
+            }
+        }
+    }
+}
+
 void KindleMainWindow::focusTranslateLine()
 {
-  qDebug() << "Setting focus...";
+  qDebug() << "Setting translateLine focus...";
   ui->translateLine->setFocus();
-  qDebug() << "Selecting ALL!";
   ui->translateLine->selectAll();
 }
 
@@ -229,20 +251,123 @@ void KindleMainWindow::updateMatchResults( bool finished )
 void KindleMainWindow::typingEvent( QString const & t )
 {
   qDebug() << "typing Event: " << t;
-  if ( t == "\n" || t == "\r" )
-  {
-    if( ui->translateLine->isEnabled() )
+
+  if ( t == "\n" || t == "\r" ) {
       focusTranslateLine();
-  }
-  else
-  {
-    if( ui->translateLine->isEnabled() )
-    {
+  } else {
+    if( ui->translateLine->isEnabled() ) {
       ui->translateLine->setText( t );
       ui->translateLine->setFocus();
       ui->translateLine->setCursorPosition( t.size() );
     }
   }
+}
+
+bool KindleMainWindow::eventFilter( QObject * obj, QEvent * ev )
+{
+
+  if ( obj == ui->translateLine )
+  {
+      qDebug() << "TRANSLATE_LINE_EVENT: " << ev;
+
+    if ( ev->type() == QEvent::KeyPress )
+    {
+      QKeyEvent * keyEvent = static_cast< QKeyEvent * >( ev );
+
+      // move to the next suggestion
+      if ( keyEvent->matches(QKeySequence::MoveToNextLine) ) {
+          if (wordList->count() != 0) {
+              int rowToJump = (wordList->currentRow() + 1) % wordList->count();
+              wordList->setCurrentRow(rowToJump, QItemSelectionModel::ClearAndSelect);
+          }
+          return true;
+      }
+
+      // move to the previous suggestion
+      if ( keyEvent->matches(QKeySequence::MoveToPreviousLine) ) {
+          if (wordList->count() != 0) {
+              int currRow = wordList->currentRow();
+              if (currRow < 0) {
+                  currRow = 0;
+              }
+              int rowToJump = (wordList->count() + currRow - 1) % wordList->count();
+              wordList->setCurrentRow(rowToJump, QItemSelectionModel::ClearAndSelect);
+          }
+          return true;
+      }
+    }
+
+    if ( ev->type() == QEvent::FocusIn ) {
+      // QFocusEvent * focusEvent = static_cast< QFocusEvent * >( ev );
+
+      // select all on mouse click
+      //if ( focusEvent->reason() == Qt::MouseFocusReason ) {
+        ui->translateLine->selectAll();
+        QTimer::singleShot(0, this, SLOT(focusTranslateLine()));
+      //}
+      return false;
+    }
+  }
+  else if ( obj == wordList )
+  {
+    // qDebug() << ev;
+    if ( ev->type() == QEvent::KeyPress )
+    {
+      QKeyEvent * keyEvent = static_cast< QKeyEvent * >( ev );
+
+      qDebug() << keyEvent;
+
+      if ( keyEvent->matches(QKeySequence::MoveToNextLine) )
+      {
+          qDebug() << "current wordList index: " << wordList->currentIndex();
+
+          wordList->setCurrentRow(wordList->currentRow() + 1, QItemSelectionModel::ClearAndSelect);
+          return true;
+      }
+
+      if ( keyEvent->matches( QKeySequence::MoveToPreviousLine ) &&
+           !wordList->currentRow() )
+      {
+        qDebug() << "!!!!!+++!!!";
+        wordList->setCurrentRow( 0, QItemSelectionModel::Clear );
+        ui->translateLine->setFocus( Qt::ShortcutFocusReason );
+        return true;
+      }
+
+      qDebug() << "!!!!!+++!!!-2";
+      if ( keyEvent->matches( QKeySequence::InsertParagraphSeparator ) &&
+           wordList->selectedItems().size() )
+      {
+        getCurrentArticleView()->focus();
+        return false;
+      }
+
+      // Handle typing events used to initiate new lookups
+      // TODO: refactor to eliminate duplication (see below)
+
+      if ( keyEvent->modifiers() &
+           ( Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier ) )
+        return false; // A non-typing modifier is pressed
+
+      if ( keyEvent->key() == Qt::Key_Space ||
+           keyEvent->key() == Qt::Key_Backspace ||
+           keyEvent->key() == Qt::Key_Tab ||
+           keyEvent->key() == Qt::Key_Backtab )
+        return false; // Those key have other uses than to start typing
+                      // or don't make sense
+
+      QString text = keyEvent->text();
+      qDebug() << "text:" << text;
+
+      if ( text.size() )
+      {
+        typingEvent( text );
+        return true;
+      }
+    }
+  }
+
+  return QMainWindow::eventFilter( obj, ev );
 }
 
 void KindleMainWindow::applyQtStyleSheet( QString const & displayStyle )

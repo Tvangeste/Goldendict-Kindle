@@ -7,6 +7,8 @@
 #include <QWSServer>
 #include <QDebug>
 #include <QListWidget>
+#include <QEvent>
+#include <QMouseEvent>
 
 #include "ui_kindlemainwindow.h"
 
@@ -29,6 +31,7 @@ private slots:
     void translateInputChanged( QString const & );
     void translateInputFinished(  );
     void showTranslationFor( QString const & word, unsigned group = 0 );
+    void on_actionSelect_triggered();
     void on_actionClose_triggered();
     void typingEvent( QString const & );
 
@@ -70,6 +73,8 @@ private:
     void makeDictionaries();
 
     void updateMatchResults( bool finished );
+
+    virtual bool eventFilter( QObject *, QEvent * );
 };
 
 #endif // KINDLEMAINWINDOW_H

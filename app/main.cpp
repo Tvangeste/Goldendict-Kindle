@@ -8,6 +8,7 @@ int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
 
+    a.setNavigationMode(Qt::NavigationModeKeypadTabOrder);
     a.setStyle(new GdAppStyle);
 
     Config::Class cfg( Config::load() );
